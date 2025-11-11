@@ -1,6 +1,15 @@
 #include "flappuino.h"
 #include <string.h>
 
+#define BARS_LEN 5
+#define BAR_GAP 32
+#define BAR_WIDTH 5
+#define BAR_SPACING (WIDTH / 3)
+
+#define PLAYER_X (WIDTH/3)
+#define PLAYER_WIDTH 3
+#define PLAYER_HEIGHT 3
+
 static U16 prng_state = 1;
 
 void prng_seed(U16 seed) {
@@ -13,30 +22,22 @@ U08 prng_next(void) {
     return prng_state >> 8;
 }
 
-B08 aabb_point_collision(Rect a, U08 x, U08 y) {
-    B08 r0 = a.x <= x;
-    B08 r1 = a.y <= y;
-    B08 r2 = a.x+a.w >= x;
-    B08 r3 = a.y+a.h >= y;
-    B08 res = r0 & r1 & r2 & r3;
+B08 collision(Bar bar, Player player) {
+    B08 r0 = bar.x + BAR_WIDTH < PLAYER_X;
+    B08 r1 = PLAYER_X + PLAYER_WIDTH < bar.x;
+    B08 r2 = 0 + bar.y < player.y;
+    B08 r3 = bar.y+BAR_GAP + HEIGHT-bar.y < player.y;
+    B08 r4 = player.y + PLAYER_HEIGHT < 0;
+    B08 r5 = player.y + PLAYER_HEIGHT < bar.y+BAR_GAP;
+    B08 res = !(r0 | r1 | r2 | r3 | r4 | r5);
     return res;
 }
 
-B08 aabb_aabb_collision(Rect a, Rect b) {
-    B08 r0 = a.x + a.w < b.x;
-    B08 r1 = b.x + b.w < a.x;
-    B08 r2 = a.y + a.h < b.y;
-    B08 r3 = b.y + b.h < a.y;
-    B08 res = !(r0 | r1 | r2 | r3);
-    return res;
-}
-
-B08 game_over(Bar *bars, U08 len, Rect player_aabb) {
-    if (player_aabb.y < 0) return 1;
-    if (player_aabb.y > HEIGHT) return 1;
+B08 game_over(Bar *bars, U08 len, Player player) {
+    if (player.y < 0) return 1;
+    if (player.y > HEIGHT) return 1;
     for (U08 i=0; i<len; i+=1) {
-        if (aabb_aabb_collision(bars[i].upper, player_aabb)) return 1;
-        if (aabb_aabb_collision(bars[i].lower, player_aabb)) return 1;
+        if (collision(bars[i], player)) return 1;
     }
     return 0;
 }
@@ -54,6 +55,8 @@ B08 game_over(Bar *bars, U08 len, Rect player_aabb) {
 
 #define SSD1306_DATA 0x40
 #define SSD1306_COMMAND 0x00
+#define SSD1306_CMD_DISPLAY_NORMAL 0xA6
+#define SSD1306_CMD_DISPLAY_INVERSE 0xA7
 #define SSD1306_CMD_DISPLAY_OFF 0xAE
 #define SSD1306_CMD_DISPLAY_ON 0xAF
 #define SSD1306_CMD_COL_RANGE 0x21
@@ -94,7 +97,7 @@ void draw_digit(U08 *buf, U08 x, U08 y, U08 digit, U08 colour) {
     }
 }
 
-void draw_number(U08 *buf, U08 x, U08 y, B08 right_adjust, U08 number, U08 colour) {
+void draw_number(U08 *buf, U08 x, U08 y, U08 number, U08 colour) {
     if (HEIGHT <= y) return;
 #define MAX_DIGITS 3
     U08 digits[MAX_DIGITS] = {0};
@@ -105,18 +108,11 @@ void draw_number(U08 *buf, U08 x, U08 y, B08 right_adjust, U08 number, U08 colou
         number /= 10; // TODO: same as above
         if (!number) break;
     }
-    if (right_adjust) {
-        U08 n = i;
-        x += (MAX_DIGITS-1)*(sizeof(font_digits[0])+1);
-        for (; i>=0 && x+3<WIDTH; i-=1) {
-            draw_digit(buf, x, y, digits[n-i], colour);
-            x -= sizeof(font_digits[0]) + 1; // 1 for spacing
-        }
-    } else {
-        for (; i>=0 && x+3<WIDTH; i-=1) {
-            draw_digit(buf, x, y, digits[i], colour);
-            x += sizeof(font_digits[0]) + 1; // 1 for spacing
-        }
+    U08 n = i;
+    x += (MAX_DIGITS-1)*(sizeof(font_digits[0])+1);
+    for (; i>=0 && x+3<WIDTH; i-=1) {
+        draw_digit(buf, x, y, digits[n-i], colour);
+        x -= sizeof(font_digits[0]) + 1; // 1 for spacing
     }
 }
 
@@ -136,12 +132,11 @@ void draw_vline(U08 *buf, U08 x, U08 y, U08 len, U08 colour) {
     }
 }
 
-void draw_rect(U08 *buf, Rect rect, U08 colour) {
-    if (!rect.w | !rect.h) return;
-    U08 ymax = rect.y + rect.h;
+void draw_rect(U08 *buf, U08 x, U08 y, U08 w, U08 h, U08 colour) {
+    U08 ymax = y + h;
     if (ymax >= HEIGHT) ymax = HEIGHT - 1;
-    for (U08 ycur=rect.y; ycur<=ymax; ycur+=1) {
-        draw_hline(buf, rect.x, ycur, rect.w, colour);
+    for (U08 ycur=y; ycur<=ymax; ycur+=1) {
+        draw_hline(buf, x, ycur, w, colour);
     }
 }
 
@@ -196,49 +191,52 @@ void ssd1306_flip(U08 *buf) {
     twi_stop();
 }
 
+void ssd1306_flash_inverse(void) {
+    twi_start();
+    twi_select_address_for_write(DISPLAY_ADDRESS);
+    twi_write(SSD1306_COMMAND);
+    twi_write(SSD1306_CMD_DISPLAY_INVERSE);
+    _delay_ms(100);
+    twi_write(SSD1306_CMD_DISPLAY_NORMAL);
+}
+
 static U08 buf[BUF_SIZE] = {0};
 
-#define BARS_LEN 6
-Bar bars[BARS_LEN];
+static Bar bars[BARS_LEN];
+static U08 bar_next = 0;
 static Player player;
-U08 state;
+static U08 state;
 static U08 score;
-static U08 t;
+static U32 t;
+
+void bar_fill(Bar *bar, U08 x) {
+    bar->x = x;
+    bar->y = prng_next() % (HEIGHT+1-BAR_GAP);
+    if (bar->y+BAR_GAP >= HEIGHT) {
+        bar->y = HEIGHT - 1 - BAR_GAP;
+    }
+}
 
 void bars_init(Bar *bars, U08 len) {
-#define BAR_GAP 42
-#define BAR_WIDTH 5
+    bar_next = 0;
     for (U08 i=0; i<len; i+=1) {
-        bars[i].upper.x = WIDTH + i * WIDTH/3;
-        bars[i].lower.x = bars[i].upper.x;
-
-        bars[i].upper.y = 0;
-        bars[i].upper.h = prng_next() % (HEIGHT+1-BAR_GAP);
-        bars[i].lower.y = bars[i].upper.h + BAR_GAP;
-        bars[i].lower.h = HEIGHT - bars[i].lower.y;
-        if (bars[i].lower.y >= HEIGHT) {
-            bars[i].lower.y = HEIGHT - 1;
-            bars[i].lower.h = 0;
-        }
+        bar_fill(bars+i, WIDTH + i*BAR_SPACING);
     }
 }
 
 void game_reset(void) {
     score = 0;
     t = 0;
-    state = STATE_RUNNING;
+    state = STATE_MENU;
     player = (Player) {
-        .aabb.x = WIDTH/3,
-        .aabb.y = HEIGHT/3,
-        .aabb.w = 3,
-        .aabb.h = 3,
+        .y = HEIGHT/3,
         .v = 0,
     };
     bars_init(bars, BARS_LEN);
 }
 
 int main(void) {
-    prng_seed(42);
+    prng_seed(1);
 
     twi_init();
     ssd1306_init();
@@ -262,34 +260,66 @@ int main(void) {
         memset(buf, 0x00, BUF_SIZE);
         switch (state) {
             case STATE_MENU:
+                draw_number(buf, WIDTH - 3*4, 0, score, 1);
+
+                for (U08 i=0; i<BARS_LEN; i+=1) {
+                    draw_rect(buf, bars[i].x, 0, BAR_WIDTH, bars[i].y, 1);
+                    draw_rect(buf, bars[i].x, bars[i].y+BAR_GAP, BAR_WIDTH, HEIGHT-bars[i].y-BAR_GAP, 1);
+                }
+
+                draw_rect(buf, PLAYER_X, player.y, PLAYER_WIDTH, PLAYER_HEIGHT, 1);
+
+                if (button_down && !button_old) state = STATE_RUNNING;
                 break;
 
             case STATE_GAME_OVER:
+                memset(buf, 0xFF, BUF_SIZE);
+                draw_number(buf, WIDTH/2-10, HEIGHT/2-3, score, 0);
+                ssd1306_flip(buf);
                 if (button_down && !button_old) game_reset();
                 break;
 
             case STATE_RUNNING:
-                if (game_over(bars, BARS_LEN, player.aabb)) {
+                if (game_over(bars, BARS_LEN, player)) {
+                    for (U08 i=0; i<3; i+=1) {
+                        ssd1306_flash_inverse();
+                        _delay_ms(80);
+                    }
                     state = STATE_GAME_OVER;
                     break;
                 }
-                player.v += -4*button_down*GRAVITY;
+                player.v += -2*button_down*GRAVITY;
                 player.v += GRAVITY;
 
                 if (player.v < -4) player.v = -4;
                 if (player.v >  4) player.v =  4;
-                player.aabb.y += player.v;
+                player.y += player.v;
 
-                draw_number(buf, WIDTH - 3*4, 0, 1, score, 1);
+                draw_number(buf, WIDTH - 3*4, 0, score, 1);
 
                 for (U08 i=0; i<BARS_LEN; i+=1) {
-                    bars[i].upper.x -= 1;
-                    bars[i].lower.x -= 1;
-                    draw_rect(buf, bars[i].upper, 1);
-                    draw_rect(buf, bars[i].lower, 1);
+                    // check if score needs updating
+                    U08 bar_old_x = bars[i].x;
+                    bars[i].x -= 1;
+                    if (bar_old_x > PLAYER_X && bars[i].x <= PLAYER_X)
+                        score += 1;
+
+                    // draw bar
+                    draw_rect(buf, bars[i].x, 0, BAR_WIDTH, bars[i].y, 1);
+                    draw_rect(buf, bars[i].x, bars[i].y+BAR_GAP, BAR_WIDTH, HEIGHT-bars[i].y-BAR_GAP, 1);
+
+                    // check if bar has gone off screen
+                    if (bars[bar_next].x + BAR_WIDTH == 0) {
+                        U08 rightmost_bar_idx = bar_next + BARS_LEN - 1;
+                        if (rightmost_bar_idx >= BARS_LEN) rightmost_bar_idx = 0;
+                        U08 rightmost_x = bars[rightmost_bar_idx].x;
+                        bar_fill(bars + bar_next, rightmost_x + BAR_SPACING);
+                        bar_next += 1;
+                        if (bar_next >= BARS_LEN) bar_next = 0;
+                    }
                 }
 
-                draw_rect(buf, player.aabb, 1);
+                draw_rect(buf, PLAYER_X, player.y, PLAYER_WIDTH, PLAYER_HEIGHT, 1);
                 break;
         }
 
