@@ -72,35 +72,6 @@ U08 font_digits[10][3] = {
     {0x17, 0x15, 0x1F}  // 9
 };
 
-U08 font_letters[26][3] = {
-    {0x1F, 0x05, 0x1F}, // A
-    {0x1F, 0x15, 0x0A}, // B
-    {0x0E, 0x11, 0x11}, // C
-    {0x1F, 0x11, 0x0E}, // D
-    {0x1F, 0x15, 0x11}, // E
-    {0x1F, 0x05, 0x01}, // F
-    {0x0E, 0x11, 0x1D}, // G
-    {0x1F, 0x04, 0x1F}, // H
-    {0x11, 0x1F, 0x11}, // I
-    {0x08, 0x10, 0x0F}, // J
-    {0x1F, 0x04, 0x1B}, // K
-    {0x1F, 0x10, 0x10}, // L
-    {0x1F, 0x06, 0x1F}, // M
-    {0x1F, 0x0C, 0x1F}, // N
-    {0x0E, 0x11, 0x0E}, // O
-    {0x1F, 0x05, 0x02}, // P
-    {0x0E, 0x19, 0x1E}, // Q
-    {0x1F, 0x0D, 0x16}, // R
-    {0x12, 0x15, 0x09}, // S
-    {0x01, 0x1F, 0x01}, // T
-    {0x0F, 0x10, 0x0F}, // U
-    {0x07, 0x18, 0x07}, // V
-    {0x1F, 0x0C, 0x1F}, // W
-    {0x1B, 0x04, 0x1B}, // X
-    {0x03, 0x1C, 0x03}, // Y
-    {0x19, 0x15, 0x13}  // Z
-};
-
 void setpixel(U08 *buf, U08 x, U08 y, B08 colour) {
     if (x >= WIDTH || y >= HEIGHT) return;
     U08 page = y / 8;
@@ -146,31 +117,6 @@ void draw_number(U08 *buf, U08 x, U08 y, B08 right_adjust, U08 number, U08 colou
             draw_digit(buf, x, y, digits[i], colour);
             x += sizeof(font_digits[0]) + 1; // 1 for spacing
         }
-    }
-}
-
-void draw_cstr(U08 *buf, U08 x, U08 y, char *cstr, U08 colour) {
-    U08 x0 = x;
-    if (HEIGHT <= y) return;
-    while (*cstr) {
-        U08 letter = *cstr;
-        if ('a' <= letter && letter <= 'z') {
-            U08 idx = letter - 'a';
-            for (U08 col=0; col<sizeof(font_letters[0]); col+=1) {
-                U08 bits = font_letters[idx][col];
-                for (U08 row=0; row<5; row+=1) {
-                    if (bits & (1 << row)) setpixel(buf, x+col, y+row, colour);
-                }
-            }
-            x += sizeof(font_letters[0]) + 1; // 1 for spacing
-        } else if (letter == ' ') {
-            // draw nothing
-            x += sizeof(font_letters[0]) + 1; // 1 for spacing
-        } else if (letter == '\n') {
-            x = x0;
-            y += 5 + 1; // go down 1 row by going down 5 pixels (font height) + 1 for spacing
-        }
-        cstr += 1;
     }
 }
 
@@ -316,11 +262,9 @@ int main(void) {
         memset(buf, 0x00, BUF_SIZE);
         switch (state) {
             case STATE_MENU:
-                draw_cstr(buf, 20, 20, "hellooooo", 1);
                 break;
 
             case STATE_GAME_OVER:
-                draw_cstr(buf, WIDTH/2 - sizeof(GAME_OVER_STR), HEIGHT/2, GAME_OVER_STR, 1);
                 if (button_down && !button_old) game_reset();
                 break;
 
