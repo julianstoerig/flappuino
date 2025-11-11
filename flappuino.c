@@ -199,14 +199,6 @@ void rect(U08 *buf, U08 x, U08 y, U08 width, U08 height, U08 colour) {
     }
 }
 
-void ssd1306_command(U08 command) {
-    twi_start();
-    twi_select_address_for_write(DISPLAY_ADDRESS);
-    twi_write(SSD1306_COMMAND);
-    twi_write(command);
-    twi_stop();
-}
-
 void ssd1306_init(void) {
     // 0. The initial stop/start is often not strictly necessary for the first command,
     //    but it's a good practice to ensure a clean start if the bus was left busy.
@@ -218,22 +210,22 @@ void ssd1306_init(void) {
 
     // A complete, standard initialization sequence for 128x64 display
     U08 init_cmds[] = {
-        0xAE,           // 0xAE: Set Display OFF
-        0xD5, 0x80,     // 0xD5: Set Display Clock Divide Ratio/Oscillator Frequency, 0x80 (default)
-        0xA8, HEIGHT-1, // 0xA8: Set Multiplex Ratio, HEIGHT-1 (63 for 64-pix tall)
-        0xD3, 0x00,     // 0xD3: Set Display Offset, 0x00
-        0x40,           // 0x40: Set Display Start Line to 0 (RAM address 0)
-        0x8D, 0x14,     // 0x8D: Charge Pump Setting, 0x14 (Enable)
-        0x20, 0x00,     // 0x20: Set Memory Addressing Mode, 0x00 (Horizontal)
-        0xA1,           // 0xA1: Set Segment Re-map (0xA0 is normal, 0xA1 is column 0 mapped to SEG127)
-        0xC8,           // 0xC8: Set COM Output Scan Direction (0xC0 is normal, 0xC8 is remapped)
-        0xDA, 0x12,     // 0xDA: Set COM Pins Hardware Configuration, 0x12 (for 128x64)
-        0x81, 0xCF,     // 0x81: Set Contrast Control, 0xCF (Max)
-        0xD9, 0xF1,     // 0xD9: Set Pre-charge Period, 0xF1
-        0xDB, 0x40,     // 0xDB: Set VCOM Deselect Level, 0x40 (0.83*VCC)
-        0xA4,           // 0xA4: Entire Display OFF/ON (0xA4: Normal, 0xA5: All ON)
-        0xA6,           // 0xA6: Normal Display (0xA7: Inverse Display)
-        0xAF            // 0xAF: Set Display ON
+        0xAE,           // 0xAE: set display off
+        0xD5, 0x80,     // 0xD5: set display clock divide ratio/oscillator frequency, 0x80 (default)
+        0xA8, HEIGHT-1, // 0xA8: set multiplex ratio, HEIGHT-1 (63 for 64-pix tall)
+        0xD3, 0x00,     // 0xD3: set display offset, 0x00
+        0x40,           // 0x40: set display start line to 0 (RAM address 0)
+        0x8D, 0x14,     // 0x8D: charge pump setting, 0x14 (enable)
+        0x20, 0x00,     // 0x20: set memory addressing mode, 0x00 (horizontal)
+        0xA1,           // 0xA1: set segment re-map (0xA0 is normal, 0xA1 is column 0 mapped to SEG127)
+        0xC8,           // 0xC8: set COM output scan direction (0xC0 is normal, 0xC8 is remapped)
+        0xDA, 0x12,     // 0xDA: set COM pins hardware configuration, 0x12 (for 128x64)
+        0x81, 0xCF,     // 0x81: set contrast control, 0xCF (max)
+        0xD9, 0xF1,     // 0xD9: set pre-charge period, 0xF1
+        0xDB, 0x40,     // 0xDB: set VCOM deselect level, 0x40 (0.83*VCC)
+        0xA4,           // 0xA4: entire display OFF/ON (0xA4: normal, 0xA5: all ON)
+        0xA6,           // 0xA6: normal display (0xA7: inverse display)
+        0xAF            // 0xAF: set display ON
     };
 
     // Send all commands in one I2C transaction
