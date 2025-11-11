@@ -24,7 +24,6 @@ typedef struct Player Player;
 struct Player {
     Rect aabb;
     S08 v;
-    S08 a;
 };
 
 typedef enum State State;

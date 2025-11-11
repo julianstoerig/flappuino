@@ -174,7 +174,7 @@ void draw_cstr(U08 *buf, U08 x, U08 y, char *cstr, U08 colour) {
     }
 }
 
-void hline(U08 *buf, U08 x, U08 y, U08 len, U08 colour) {
+void draw_hline(U08 *buf, U08 x, U08 y, U08 len, U08 colour) {
     U08 xmax = x + len;
     if (xmax >= WIDTH) xmax = WIDTH-1;
     for (U08 xcur=x; xcur<=xmax; xcur+=1) {
@@ -182,7 +182,7 @@ void hline(U08 *buf, U08 x, U08 y, U08 len, U08 colour) {
     }
 }
 
-void vline(U08 *buf, U08 x, U08 y, U08 len, U08 colour) {
+void draw_vline(U08 *buf, U08 x, U08 y, U08 len, U08 colour) {
     U08 ymax = y + len;
     if (ymax >= HEIGHT) ymax = HEIGHT-1;
     for (U08 ycur=y; ycur<=ymax; ycur+=1) {
@@ -190,12 +190,12 @@ void vline(U08 *buf, U08 x, U08 y, U08 len, U08 colour) {
     }
 }
 
-void rect(U08 *buf, U08 x, U08 y, U08 width, U08 height, U08 colour) {
-    if (!width | !height) return;
-    U08 ymax = y + height;
+void draw_rect(U08 *buf, Rect rect, U08 colour) {
+    if (!rect.w | !rect.h) return;
+    U08 ymax = rect.y + rect.h;
     if (ymax >= HEIGHT) ymax = HEIGHT - 1;
-    for (U08 ycur=y; ycur<=ymax; ycur+=1) {
-        hline(buf, x, ycur, width, colour);
+    for (U08 ycur=rect.y; ycur<=ymax; ycur+=1) {
+        draw_hline(buf, rect.x, ycur, rect.w, colour);
     }
 }
 
@@ -234,12 +234,13 @@ void ssd1306_flip(U08 *buf) {
     twi_start();
     twi_select_address_for_write(DISPLAY_ADDRESS);
     twi_write(SSD1306_COMMAND);
-    twi_write(SSD1306_CMD_COL_RANGE);
-    twi_write(0);
-    twi_write(WIDTH-1);
-    twi_write(SSD1306_CMD_PAGE_RANGE);
-    twi_write(0);
-    twi_write(PAGES-1);
+
+    //           v
+    twi_write(0x00); // set low nibble of column start address to 0
+    twi_write(0x10); // set high nibble of column start address to 0
+
+    twi_write(0xB0); // set page start address
+
     twi_stop();
 
     twi_start();
@@ -249,77 +250,104 @@ void ssd1306_flip(U08 *buf) {
     twi_stop();
 }
 
+static U08 buf[BUF_SIZE] = {0};
+
+#define BARS_LEN 6
+Bar bars[BARS_LEN];
+static Player player;
+U08 state;
+static U08 score;
+static U08 t;
+
+void bars_init(Bar *bars, U08 len) {
+#define BAR_GAP 42
+#define BAR_WIDTH 5
+    for (U08 i=0; i<len; i+=1) {
+        bars[i].upper.x = WIDTH + i * WIDTH/3;
+        bars[i].lower.x = bars[i].upper.x;
+
+        bars[i].upper.y = 0;
+        bars[i].upper.h = prng_next() % (HEIGHT+1-BAR_GAP);
+        bars[i].lower.y = bars[i].upper.h + BAR_GAP;
+        bars[i].lower.h = HEIGHT - bars[i].lower.y;
+        if (bars[i].lower.y >= HEIGHT) {
+            bars[i].lower.y = HEIGHT - 1;
+            bars[i].lower.h = 0;
+        }
+    }
+}
+
+void game_reset(void) {
+    score = 0;
+    t = 0;
+    state = STATE_RUNNING;
+    player = (Player) {
+        .aabb.x = WIDTH/3,
+        .aabb.y = HEIGHT/3,
+        .aabb.w = 3,
+        .aabb.h = 3,
+        .v = 0,
+    };
+    bars_init(bars, BARS_LEN);
+}
 
 int main(void) {
-    U08 buf[BUF_SIZE] = {0};
+    prng_seed(42);
+
+    twi_init();
+    ssd1306_init();
+
     DDRB &= ~(1 << PB2);
     U08 button_down = 0;
     U08 button_old = button_down;
 
-    U08 score = 0;
-    U08 t = 0;
-
 #define GRAVITY 1
+#define GAME_OVER_STR "game over"
 
-    U08 player_x = WIDTH/3;
-    U08 player_y = HEIGHT/3;
-    S08 player_dy = 0;
-    S08 player_ddy = 0;
-    U08 player_width = 5;
-    U08 player_height = 5;
-
-#define BARS_LEN 6
-    U08 bar_x[BARS_LEN];
-    U08 bar_y[BARS_LEN];
-    U08 bar_width[BARS_LEN];
-    U08 bar_gap[BARS_LEN];
-    for (U08 i=0; i<BARS_LEN; i+=1) {
-        bar_gap[i] = 32;
-        bar_width[i] = 5;
-
-        bar_x[i] = WIDTH + i * WIDTH/3;
-
-        bar_y[i] = i * HEIGHT/5;
-        if (bar_y[i]-bar_gap[i] > HEIGHT) bar_y[i] = HEIGHT - bar_gap[i];
-    }
-
-    twi_init();
-    ssd1306_init();
+    game_reset();
 
     while (1) {
         button_old = button_down;
         button_down = PINB & (1 << PB2);
 
-        _delay_ms(50);
+        _delay_ms(10);
         t += 1;
 
-        if (button_down) {
-            player_ddy = -12*GRAVITY;
-        } else {
-            player_ddy = GRAVITY;
-        }
-
-        player_dy += player_ddy;
-        if (player_dy < -4) player_dy = -4;
-        if (player_dy >  4) player_dy =  4;
-        player_y += player_dy;
-
         memset(buf, 0x00, BUF_SIZE);
+        switch (state) {
+            case STATE_MENU:
+                draw_cstr(buf, 20, 20, "hellooooo", 1);
+                break;
 
-        draw_number(buf, WIDTH - 3*4, 0, 1, score, 1);
+            case STATE_GAME_OVER:
+                draw_cstr(buf, WIDTH/2 - sizeof(GAME_OVER_STR), HEIGHT/2, GAME_OVER_STR, 1);
+                if (button_down && !button_old) game_reset();
+                break;
 
-        for (U08 i=0; i<BARS_LEN; i+=1) {
-            rect(buf,
-                bar_x[i]-t, 0,
-                bar_width[i], bar_y[i],
-                1);
-            rect(buf,
-                bar_x[i]-t, bar_y[i]+bar_gap[i],
-                bar_width[i], HEIGHT-bar_y[i]-bar_gap[i],
-                1);
+            case STATE_RUNNING:
+                if (game_over(bars, BARS_LEN, player.aabb)) {
+                    state = STATE_GAME_OVER;
+                    break;
+                }
+                player.v += -4*button_down*GRAVITY;
+                player.v += GRAVITY;
+
+                if (player.v < -4) player.v = -4;
+                if (player.v >  4) player.v =  4;
+                player.aabb.y += player.v;
+
+                draw_number(buf, WIDTH - 3*4, 0, 1, score, 1);
+
+                for (U08 i=0; i<BARS_LEN; i+=1) {
+                    bars[i].upper.x -= 1;
+                    bars[i].lower.x -= 1;
+                    draw_rect(buf, bars[i].upper, 1);
+                    draw_rect(buf, bars[i].lower, 1);
+                }
+
+                draw_rect(buf, player.aabb, 1);
+                break;
         }
-
-        rect(buf, player_x, player_y, player_width, player_height, 1);
 
         ssd1306_flip(buf);
     }
