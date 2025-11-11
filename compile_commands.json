@@ -1,0 +1,28 @@
+[
+  {
+    "arguments": [
+      "/usr/sbin/avr-gcc",
+      "-Os",
+      "-DF_APU=16000000UL",
+      "-mmcu=atmega328p",
+      "-c",
+      "flappuino.o",
+      "flappuino.c"
+    ],
+    "directory": "/home/julian/jd/30-39-hobbies/32-programming/32.023-flappuino",
+    "file": "/home/julian/jd/30-39-hobbies/32-programming/32.023-flappuino/flappuino.c"
+  },
+  {
+    "arguments": [
+      "/usr/sbin/avr-gcc",
+      "-Os",
+      "-DF_APU=16000000UL",
+      "-mmcu=atmega328p",
+      "-c",
+      "flappuino.o",
+      "flappuino.h"
+    ],
+    "directory": "/home/julian/jd/30-39-hobbies/32-programming/32.023-flappuino",
+    "file": "/home/julian/jd/30-39-hobbies/32-programming/32.023-flappuino/flappuino.h"
+  }
+]
