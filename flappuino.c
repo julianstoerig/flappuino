@@ -200,15 +200,11 @@ void rect(U08 *buf, U08 x, U08 y, U08 width, U08 height, U08 colour) {
 }
 
 void ssd1306_init(void) {
-    // 0. The initial stop/start is often not strictly necessary for the first command,
-    //    but it's a good practice to ensure a clean start if the bus was left busy.
     twi_start();
     twi_select_address_for_write(DISPLAY_ADDRESS);
     twi_write(SSD1306_COMMAND);
 
-    // Initial Display OFF (0xAE) is done in the loop below.
-
-    // A complete, standard initialization sequence for 128x64 display
+    // fully initialise 128x64 display
     U08 init_cmds[] = {
         0xAE,           // 0xAE: set display off
         0xD5, 0x80,     // 0xD5: set display clock divide ratio/oscillator frequency, 0x80 (default)
