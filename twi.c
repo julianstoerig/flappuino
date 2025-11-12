@@ -1,8 +1,10 @@
 #include "twi.h"
 #include "typedefs.h"
-
+#include <util/delay.h>
 
 void twi_init(void) {
+    _delay_ms(200);
+
     TWSR = 0x00;
     TWBR = 12; // set bitrate TODO: make adjustable
     TWCR = 1 << TWEN;
@@ -77,5 +79,4 @@ S16 twi_read_array(U08 *data, S16 cap, S16 *len, S16 n) {
     *len = i;
     return n - i;
 }
-
 

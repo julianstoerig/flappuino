@@ -2,6 +2,7 @@
 
 #include <util/twi.h>
 #include "typedefs.h"
+#include "err.h"
 
 #define twi_block_until_complete() while (!(TWCR & (1 << TWINT)))
 
