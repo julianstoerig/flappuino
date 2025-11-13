@@ -16,9 +16,9 @@ struct Bar {
 
 typedef struct Player Player;
 struct Player {
-    U08 y;
-    S08 v;
-    S08 a;
+    F32 y;
+    F32 v;
+    F32 a;
 };
 
 typedef enum State State;

@@ -12,9 +12,9 @@
 #define BAR_WIDTH 5
 #define BAR_SPACING (WIDTH / 3)
 
-#define PLAYER_X (WIDTH/3)
 #define PLAYER_WIDTH 3
 #define PLAYER_HEIGHT 3
+#define PLAYER_X (WIDTH/3 - PLAYER_WIDTH*6)
 
 #define MAX_SCORE 255
 
@@ -33,7 +33,7 @@ U08 prng_next(void) {
 
 U08 bar_gap(U08 t) {
     U08 res = BAR_GAP_MAX - (BAR_GAP_MIN*t)/(MAX_SCORE*WIDTH/3); // trend
-    res +=  prng_next() % ((BAR_GAP_MAX-BAR_GAP_MIN)/5); // randomisation
+    res +=  prng_next() % ((BAR_GAP_MAX-BAR_GAP_MIN)/2); // randomisation
     return res;
 }
 
@@ -140,8 +140,7 @@ static U08 bar_next = 0;
 static Player player;
 static U08 state;
 static U08 score;
-static U32 t_last;
-static U32 t;
+static F32 t;
 
 void bar_fill(Bar *bar, U08 x) {
     bar->x = x;
@@ -161,14 +160,46 @@ void bars_init(Bar *bars, U08 len) {
 
 void game_reset(void) {
     score = 0;
-    t_last = 0;
-    t = PLAYER_TAP_DELAY;
+    t = 0.0f;
     state = STATE_MENU;
     player = (Player) {
-        .y = HEIGHT/2 - (PLAYER_HEIGHT+1)/2,
-        .v = 0,
+        .y = (F32)HEIGHT/2 - (F32)(PLAYER_HEIGHT+1)/2,
+        .v = 0.0f,
     };
     bars_init(bars, BARS_LEN);
+}
+
+void draw_bar(Bar bar) {
+#define BAR_END_OFFSET_X 1
+#define BAR_END_OFFSET_Y 3
+
+    draw_rect(buf, bar.x, 0, BAR_WIDTH, bar.y, 1); // top bar
+    draw_rect(buf, bar.x, bar.y+bar.gap,
+            BAR_WIDTH, HEIGHT-bar.y-bar.gap, 1); // bottom bar
+
+    // set leftmost value of bar end
+    U08 bar_end_x = 0;
+    if (bar.x > BAR_END_OFFSET_X) {
+        bar_end_x = bar.x - BAR_END_OFFSET_X;
+    } else {
+        bar_end_x = 0;
+    }
+    U08 bar_end_y = 0;
+    if (bar.y >= BAR_END_OFFSET_Y) {
+        bar_end_y = bar.y - BAR_END_OFFSET_Y;
+    } else {
+        bar_end_y = 0;
+    }
+
+    draw_rect(buf, bar_end_x, bar_end_y,
+            BAR_WIDTH+BAR_END_OFFSET_X*2,
+            BAR_END_OFFSET_Y, 1);
+
+    bar_end_y = bar.y + bar.gap;
+
+    draw_rect(buf, bar_end_x, bar_end_y,
+            BAR_WIDTH+BAR_END_OFFSET_X*2,
+            BAR_END_OFFSET_Y, 1);
 }
 
 int main(void) {
@@ -182,7 +213,6 @@ int main(void) {
     U08 button_old = button_down;
     U08 button_pressed = 0;
 
-#define GRAVITY 1
 #define GAME_OVER_STR "game over"
 
     do {
@@ -194,8 +224,7 @@ int main(void) {
         button_down = PINB & (1 << PB2);
         button_pressed = button_down && !button_old;
 
-        _delay_ms(10);
-        t += 1;
+        t += 2;
 
         memset(buf, 0x00, BUF_SIZE);
         switch (state) {
@@ -203,9 +232,7 @@ int main(void) {
                 draw_number(buf, WIDTH - 3*4, 0, score, 1);
 
                 for (U08 i=0; i<BARS_LEN; i+=1) {
-                    draw_rect(buf, bars[i].x, 0, BAR_WIDTH, bars[i].y, 1);
-                    draw_rect(buf, bars[i].x, bars[i].y+bars[i].gap,
-                            BAR_WIDTH, HEIGHT-bars[i].y-bars[i].gap, 1);
+                    draw_bar(bars[i]);
                 }
 
                 draw_rect(buf, PLAYER_X, player.y, PLAYER_WIDTH, PLAYER_HEIGHT, 1);
@@ -225,25 +252,23 @@ int main(void) {
                 break;
 
             case STATE_RUNNING:
-#define MAX_VEL_DOWN 4
-#define MAX_VEL_UP 6
+#define GRAVITY 0.35f
+#define FLAP_STRENGTH -2.4f
+#define MAX_VEL 4.5f
                 if (button_pressed) {
-                    player.a = -MAX_VEL_UP;
-                } else {
-                    player.a = GRAVITY;
+                    player.v = FLAP_STRENGTH;
                 }
-                player.v += player.a;
+                player.v += GRAVITY;
+                if (player.v >  MAX_VEL) player.v =  MAX_VEL;
 
-                if (player.v < -MAX_VEL_UP) player.v = -MAX_VEL_UP;
-                if (player.v >  MAX_VEL_DOWN) player.v =  MAX_VEL_DOWN;
-                player.y += player.v;
+                player.y += 2*player.v;
 
                 draw_number(buf, WIDTH - 3*4, 0, score, 1);
 
                 for (U08 i=0; i<BARS_LEN; i+=1) {
                     // check if score needs updating
                     U08 bar_old_x = bars[i].x;
-                    bars[i].x -= 1;
+                    bars[i].x -= 2*1;
                     if (bar_old_x > PLAYER_X && bars[i].x <= PLAYER_X) {
                         if (score == MAX_SCORE) {
                             state = STATE_MENU;
@@ -252,10 +277,7 @@ int main(void) {
                         }
                     }
 
-                    // draw bar
-                    draw_rect(buf, bars[i].x, 0, BAR_WIDTH, bars[i].y, 1);
-                    draw_rect(buf, bars[i].x, bars[i].y+bars[i].gap,
-                            BAR_WIDTH, HEIGHT-bars[i].y-bars[i].gap, 1);
+                    draw_bar(bars[i]);
 
                     // check if bar has gone off screen
                     if (bars[bar_next].x + BAR_WIDTH == 0) {
