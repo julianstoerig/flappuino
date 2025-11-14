@@ -1,0 +1,6 @@
+﻿Designator,Footprint,Quantity,Value,LCSC Part #
+A1,Arduino_Nano,1,Arduino_Nano_v3.x,
+BRD1,128x64OLED,1,SSD1306,
+D1,LED Universal Thruhole,1,LED,
+"R1, R2",Resistor Universal Thruhole,2,R,
+S1,B3F-4055,1,B3F-4005,
